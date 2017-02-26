@@ -1,0 +1,22 @@
+def a as int = 5 * (2 + 1) + 13 * 2;
+def b as int = 0;
+
+if (a != 41) {
+	a = 5;
+} else {
+	a = 6;
+}
+
+for (def i as int = 0; i < 10; i = i + 1) {
+	b = b + i;
+}
+
+def c as func = (i as int) -> { def a as int = 5; };
+
+c();
+def d as string = "Hello, world!";
+// 안녕하세요
+
+/*
+안녕하세요
+*/
