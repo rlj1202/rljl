@@ -2,11 +2,7 @@ package main
 
 import (
 	"fmt"
-	//"bufio"
-	//"io"
 	"io/ioutil"
-	//"os"
-	//"strings"
 	"strings"
 )
 
@@ -21,17 +17,6 @@ type Tokens []Token
 type Tokenizer struct {
 	tokens Tokens
 	chars []rune
-	index int
-}
-
-type NodeType string
-type Node struct {
-	NodeType
-	children []Node
-}
-type Parser struct {
-	nodes []Node
-	tokens Tokens
 	index int
 }
 
@@ -109,68 +94,301 @@ const (
 )
 
 const (
-	STMTS NodeType = "STMTS"
-	STMT NodeType = "STMT"
-	STMT_EXPR NodeType = "STMT_EXPR"
-	STMT_IF NodeType = "STMT_IF"
-	STMT_FOR NodeType = "STMT_FOR"
-	STMT_BLOCK NodeType = "STMT_BLOCK"
+	STMTS TokenType = "STMTS"
+	STMT TokenType = "STMT"
+	STMT_EXPR TokenType = "STMT_EXPR"
+	STMT_IF TokenType = "STMT_IF"
+	STMT_FOR TokenType = "STMT_FOR"
+	STMT_BLOCK TokenType = "STMT_BLOCK"
 
-	EXPR NodeType = "EXPR"
-	EXPR_DEFINE NodeType = "EXPR_DEFINE"
-	EXPR_ASSIGN NodeType = "EXPR_ASSIGN"
-	EXPR_CALL_FUNC NodeType = "EXPR_CALL_FUNC"
-	EXPR_REF_DOT NodeType = "EXPR_REF_DOT"
-	EXPR_BIT_AND NodeType = "EXPR_BIT_AND"
-	EXPR_BIT_OR NodeType = "EXPR_BIT_OR"
-	EXPR_MUL NodeType = "EXPR_MUL"
-	EXPR_DIV NodeType = "EXPR_DIV"
-	EXPR_MOD NodeType = "EXPR_MOD"
-	EXPR_ADD NodeType = "EXPR_ADD"
-	EXPR_SUB NodeType = "EXPR_SUB"
-	EXPR_EQ NodeType = "EXPR_EQ"
-	EXPR_NEQ NodeType = "EXPR_NEQ"
-	EXPR_GT NodeType = "EXPR_GT"
-	EXPR_GTE NodeType = "EXPR_GTE"
-	EXPR_LT NodeType = "EXPR_LT"
-	EXPR_LTE NodeType = "EXPR_LTE"
-	EXPR_LOGIC_AND NodeType = "EXPR_LOGIC_AND"
-	EXPR_LOGIC_OR NodeType = "EXPR_LOGIC_OR"
-	EXPR_LOGIC_NOT NodeType = "EXPR_LOGIC_NOT"
+	EXPR TokenType = "EXPR"
+	EXPR_DEFINE TokenType = "EXPR_DEFINE"
+	EXPR_ASSIGN TokenType = "EXPR_ASSIGN"
+	EXPR_CALL_FUNC TokenType = "EXPR_CALL_FUNC"
+	EXPR_REF_DOT TokenType = "EXPR_REF_DOT"
+	EXPR_BIT_AND TokenType = "EXPR_BIT_AND"
+	EXPR_BIT_OR TokenType = "EXPR_BIT_OR"
+	EXPR_MUL TokenType = "EXPR_MUL"
+	EXPR_DIV TokenType = "EXPR_DIV"
+	EXPR_MOD TokenType = "EXPR_MOD"
+	EXPR_ADD TokenType = "EXPR_ADD"
+	EXPR_SUB TokenType = "EXPR_SUB"
+	EXPR_EQ TokenType = "EXPR_EQ"
+	EXPR_NEQ TokenType = "EXPR_NEQ"
+	EXPR_GT TokenType = "EXPR_GT"
+	EXPR_GTE TokenType = "EXPR_GTE"
+	EXPR_LT TokenType = "EXPR_LT"
+	EXPR_LTE TokenType = "EXPR_LTE"
+	EXPR_LOGIC_AND TokenType = "EXPR_LOGIC_AND"
+	EXPR_LOGIC_OR TokenType = "EXPR_LOGIC_OR"
+	EXPR_LOGIC_NOT TokenType = "EXPR_LOGIC_NOT"
+
+	TYPE TokenType = "TYPE"
 )
 
-var rules = map[NodeType][][]interface{} {
-	STMTS: {{STMT}, {STMT, STMTS}},
-	STMT: {{STMT_EXPR}, {STMT_IF}, {STMT_FOR}, {STMT_BLOCK}},
-	STMT_EXPR: {{EXPR, SEMI_COLON}},
-	STMT_IF: {{IF, PAREN_L, EXPR, PAREN_R, STMT_BLOCK}},
-	STMT_FOR: {{FOR, PAREN_L, EXPR, SEMI_COLON, EXPR, SEMI_COLON, EXPR, PAREN_R, STMT_BLOCK}},
-	STMT_BLOCK: {{STMT}, {BRACE_L, STMTS, BRACE_R}},
+const (
+	CURSOR TokenType = "."
+)
 
-	EXPR: {{EXPR_DEFINE}, {EXPR_ASSIGN}, {EXPR_CALL_FUNC}, {EXPR_REF_DOT}, {EXPR_BIT_AND}, {EXPR_BIT_OR},
+type Rule []TokenType
+type Rules []Rule
+type RuleSet struct {
+	TokenType
+	priority int
+	rules Rules
+}
+var ruleSets = []RuleSet {
+	{TYPE, 0, Rules{{INT}, {DOUBLE}, {BOOLEAN}, {STRING}, {STRUCT}, {FUNC}}},
+
+	{EXPR_DEFINE, 0, Rules{{DEF, LITERAL_IDENTIFIER, AS, TYPE}, {DEF, LITERAL_IDENTIFIER}}},
+	{EXPR_ASSIGN, 0, Rules{{LITERAL_IDENTIFIER, ASSIGN, EXPR}}},
+	{EXPR_CALL_FUNC, 0, Rules{{LITERAL_IDENTIFIER, PAREN_L, PAREN_R}, {LITERAL_IDENTIFIER, PAREN_L, PAREN_R}}},
+	{EXPR, 1, Rules{{EXPR_DEFINE}, {EXPR_ASSIGN}, {EXPR_CALL_FUNC}, {EXPR_REF_DOT}, {EXPR_BIT_AND}, {EXPR_BIT_OR},
 		{EXPR_MUL}, {EXPR_DIV}, {EXPR_MOD}, {EXPR_ADD}, {EXPR_SUB},
 		{EXPR_EQ}, {EXPR_NEQ}, {EXPR_GT}, {EXPR_GTE}, {EXPR_LT}, {EXPR_LTE},
-		{EXPR_LOGIC_AND}, {EXPR_LOGIC_OR}, {EXPR_LOGIC_NOT}},
-	EXPR_DEFINE: {{DEF, LITERAL_IDENTIFIER}, {DEF, LITERAL_IDENTIFIER, AS}},
-	EXPR_ASSIGN: {{LITERAL_IDENTIFIER, ASSIGN, EXPR}},
-	EXPR_CALL_FUNC: {{LITERAL_IDENTIFIER, PAREN_L, PAREN_R}, {LITERAL_IDENTIFIER, PAREN_L, PAREN_R}},
-	EXPR_REF_DOT: {{EXPR, PERIOD, EXPR}},
-	EXPR_BIT_AND: {{EXPR, BIT_AND, EXPR}},
-	EXPR_BIT_OR: {{EXPR, BIT_OR, EXPR}},
-	EXPR_MUL: {{EXPR, MUL, EXPR}},
-	EXPR_DIV: {{EXPR, DIV, EXPR}},
-	EXPR_MOD: {{EXPR, MOD, EXPR}},
-	EXPR_ADD: {{EXPR, ADD, EXPR}},
-	EXPR_SUB: {{EXPR, SUB, EXPR}},
-	EXPR_EQ: {{}},
-	EXPR_NEQ: {{}},
-	EXPR_GT: {{}},
-	EXPR_GTE: {{}},
-	EXPR_LT: {{}},
-	EXPR_LTE: {{}},
-	EXPR_LOGIC_AND: {{}},
-	EXPR_LOGIC_OR: {{}},
-	EXPR_LOGIC_NOT: {{}},
+		{EXPR_LOGIC_AND}, {EXPR_LOGIC_OR}, {EXPR_LOGIC_NOT},
+		{LITERAL_IDENTIFIER}, {LITERAL_STRING}, {LITERAL_INTEGER}, {LITERAL_REAL}}},
+	{EXPR_REF_DOT, 2, Rules{{EXPR, PERIOD, EXPR}}},
+	{EXPR_BIT_AND, 3, Rules{{EXPR, BIT_AND, EXPR}}},
+	{EXPR_BIT_OR, 3, Rules{{EXPR, BIT_OR, EXPR}}},
+	{EXPR_MUL, 4, Rules{{EXPR, MUL, EXPR}}},
+	{EXPR_DIV, 4, Rules{{EXPR, DIV, EXPR}}},
+	{EXPR_MOD, 4, Rules{{EXPR, MOD, EXPR}}},
+	{EXPR_ADD, 5, Rules{{EXPR, ADD, EXPR}}},
+	{EXPR_SUB, 5, Rules{{EXPR, SUB, EXPR}}},
+	{EXPR_EQ, 6, Rules{{EXPR, EQ, EXPR}}},
+	{EXPR_NEQ, 6, Rules{{EXPR, NEQ, EXPR}}},
+	{EXPR_GT, 6, Rules{{EXPR, GT, EXPR}}},
+	{EXPR_GTE, 6, Rules{{EXPR, GTE, EXPR}}},
+	{EXPR_LT, 6, Rules{{EXPR, LT, EXPR}}},
+	{EXPR_LTE, 6, Rules{{EXPR, LTE, EXPR}}},
+	{EXPR_LOGIC_AND, 7, Rules{{EXPR, LOGIC_AND, EXPR}}},
+	{EXPR_LOGIC_OR, 7, Rules{{EXPR, LOGIC_OR, EXPR}}},
+	{EXPR_LOGIC_NOT, 7, Rules{{LOGIC_NOT, EXPR}}},
+
+	//{STMT_EXPR, 8, Rules{{EXPR, SEMI_COLON}}},
+	{STMT_IF, 8, Rules{{IF, PAREN_L, EXPR, PAREN_R, STMT_BLOCK}}},
+	{STMT_FOR, 8, Rules{{FOR, PAREN_L, EXPR, SEMI_COLON, EXPR, SEMI_COLON, EXPR, PAREN_R, STMT_BLOCK}}},
+	{STMT_BLOCK, 8, Rules{{STMT}, {BRACE_L, STMTS, BRACE_R}}},
+	{STMT, 8, Rules{{STMT_EXPR}, {STMT_IF}, {STMT_FOR}, {STMT_BLOCK}}},
+	{STMTS, 8, Rules{{STMT, STMT}, {STMTS, STMT}, {STMT}}},
+}
+var priorityByTokenType = map[TokenType]int{}
+var rulesByTokenType = map[TokenType]Rules{}
+var suppositionsByTokenType = map[TokenType]*[]TokenType{}
+//var expectationsByTokenType = map[TokenType]*[]TokenType{}
+
+func (rule Rule) match(nodes []Node) bool {
+	if len(rule) != len(nodes) { return false }
+
+	for i, node := range nodes {
+		if rule[i] != node.TokenType { return false }
+	}
+
+	return true
+}
+
+func generateParsingTable() {
+	type state struct {
+		TokenType
+		cursor int
+		types []TokenType
+	}
+
+	closure := func (kernel state) {
+
+	}
+
+	//type Item struct {
+	//	TokenType
+	//	rule []TokenType
+	//}
+	//type State struct {
+	//	items []Item
+	//	children map[TokenType]State
+	//}
+	//
+	//states := []State{}
+	//
+	//test := func (cursor int, ruleSets []RuleSet) {
+	//	state := State{[]Item{}, map[TokenType]State{}}
+	//
+	//	for _, ruleSet := range ruleSets {
+	//		for _, rule := range ruleSet.rules {
+	//			//item := Item{ruleSet.TokenType, append(append(rule[:cursor], CURSOR), rule[cursor:]...)}
+	//			item := Item{ruleSet.TokenType, make([]TokenType, len(rule))}
+	//			copy(item.rule, rule)
+	//			item.rule = append(append(item.rule[:cursor], CURSOR), rule[cursor:]...)
+	//
+	//			state.items = append(state.items, item)
+	//
+	//			if _, okay := state.children[rule[cursor]]; !okay {
+	//				state.children[rule[cursor]] = State{[]Item{}, map[TokenType]State{}}
+	//			}
+	//
+	//
+	//		}
+	//	}
+	//
+	//	states = append(states, state)
+	//}
+	//
+	//test(0, ruleSets)
+	//
+	//for i, state := range states {
+	//	fmt.Printf("state %d\n", i)
+	//
+	//	for _, item := range state.items {
+	//		fmt.Printf("\t\t %-16s -> %s\n", item.TokenType, item.rule)
+	//	}
+	//}
+}
+
+func indexing() {
+	for _, ruleSet := range ruleSets {
+		priorityByTokenType[ruleSet.TokenType] = ruleSet.priority
+		rulesByTokenType[ruleSet.TokenType] = ruleSet.rules
+
+		for _, rule := range ruleSet.rules {
+			supposition := rule[0]
+
+			if _, okay := suppositionsByTokenType[supposition]; !okay {
+				suppositionsByTokenType[supposition] = &[]TokenType{}
+			}
+
+			suppositions := suppositionsByTokenType[supposition]
+			for _, token := range *suppositions {
+				if token != ruleSet.TokenType {
+					continue
+				}
+			}
+			*suppositions = append(*suppositions, ruleSet.TokenType)
+		}
+	}
+}
+
+type Node struct {
+	TokenType
+	data string
+	children []Node
+}
+
+func parse(tokens Tokens) (result []Node) {
+	nodes := make([]Node, len(tokens))
+	for i, token := range tokens {
+		nodes[i] = Node{token.TokenType, "", nil}
+	}
+
+	node := nodes[0]
+	if suppositions, okay := suppositionsByTokenType[node.TokenType]; okay {
+		isPossible := func (tokenType TokenType) bool {
+			return false
+		}
+
+		for _, supposition := range *suppositions {
+			if isPossible(supposition) {
+
+			}
+		}
+	}
+
+	return
+}
+
+func _parse(tokens Tokens) (nodes []Node) {
+	type NewNode struct {
+		Node
+		offset int
+		length int
+		canceled bool
+	}
+
+	nodes = make([]Node, len(tokens))
+	for i, token := range tokens {
+		nodes[i] = Node{token.TokenType, "", nil}
+	}
+
+	for j := 0; j < 20; j++ {
+		newNodes := make([]*NewNode, 0)
+		newNodesMarked := make([]*NewNode, len(nodes))
+
+		parsing:
+		for index, node := range nodes {
+			var newNode *NewNode = nil
+
+			if suppositions, okay := suppositionsByTokenType[node.TokenType]; okay {
+				//fmt.Printf("suppositions %-32s, %s\n", node.TokenType, suppositions)
+
+				supposing:
+				for _, supposedTokenType := range *suppositions {
+					if rules, okay := rulesByTokenType[supposedTokenType]; okay {
+						//fmt.Printf("\t\t rules %-16s %s\n", supposedTokenType, rules)
+
+						for _, rule := range rules {
+							startIndex := index - len(rule) + 1
+
+							if startIndex >= 0 && rule.match(nodes[startIndex:startIndex + len(rule)]) {
+								//fmt.Printf("\t\t checking rule %-16s: %-16s <- %-8s\n", node.TokenType, supposedTokenType, rule)
+								if newNode != nil {
+									if priority, okay := priorityByTokenType[newNode.TokenType]; okay {
+										if priorityByTokenType[supposedTokenType] > priority {
+											continue supposing
+										}
+									}
+								}
+
+								newNode = &NewNode{Node{supposedTokenType, "", nodes[startIndex:startIndex + len(rule)]}, startIndex, len(rule), false}
+
+								continue supposing
+							}
+						}
+					}
+				}
+			}
+
+			if newNode == nil {
+				newNode = &NewNode{node, index, 1, false}
+			} else {
+				fmt.Printf("\t\t %4d:%-4d newNode: %s\n", newNode.offset, newNode.offset + newNode.length-1, *newNode)
+			}
+
+			newNodesToCancel := []*NewNode{}
+			for _, markedNewNode := range newNodesMarked[newNode.offset:newNode.offset + newNode.length] {
+				if markedNewNode != nil && !markedNewNode.canceled {
+					if priority, okay := priorityByTokenType[newNode.TokenType]; okay {
+						if priorityByTokenType[markedNewNode.TokenType] < priority {
+							continue parsing
+						} else {
+							newNodesToCancel = append(newNodesToCancel, markedNewNode)
+						}
+					}
+				}
+			}
+			for _, newNodeToCancel := range newNodesToCancel {
+				newNodeToCancel.canceled = true
+			}
+
+			newNodes = append(newNodes, newNode)
+			for i := newNode.offset; i < newNode.offset + newNode.length; i++ {
+				newNodesMarked[i] = newNode
+			}
+		}
+
+		nodes = []Node{}
+		for _, newNode := range newNodes {
+			//fmt.Printf("\t\t %-16s caceled: %t\n", newNode.TokenType, newNode.canceled)
+			if !newNode.canceled {
+				nodes = append(nodes, newNode.Node)
+			}
+		}
+
+		for i, node := range nodes {
+			fmt.Printf("%d \t %-32s%s\n", i, node.TokenType, node.children)
+		}
+		fmt.Print("====================\n")
+	}
+
+	return
 }
 
 func (tokenizer *Tokenizer) accept(str string, tokenType TokenType) bool {
@@ -481,8 +699,6 @@ func main() {
 	tokenizer := Tokenizer{chars: []rune(string(dat))}
 	tokens := tokenizer.Tokenize()
 
-
-
 	for i, token := range tokens {
 		str := string(tokenizer.chars[token.Offset:token.Offset + token.Length])
 		str = strings.Replace(str, "\r", "", -1)
@@ -494,6 +710,19 @@ func main() {
 		str = strings.Replace(str, "\r", "", -1)
 		fmt.Printf("%s ", str)
 	}
+	fmt.Println("")
+
+	generateParsingTable()
+	//indexing()
+	//for token, suppositions := range suppositionsByTokenType {
+	//	fmt.Printf("if %s comes\n", token)
+	//	for i, target := range *suppositions {
+	//		fmt.Printf("\t%d\t%s\n", i, target)
+	//	}
+	//	fmt.Println("\t\tthese are supposed to follow.")
+	//}
+	//
+	//parse(tokens)
 
 	//f, err := os.Open("res/code.rljl")
 	//check(err)
